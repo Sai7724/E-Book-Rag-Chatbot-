@@ -96,15 +96,20 @@
           body: JSON.stringify({ query: q })
         });
         
-        const data = await res.json();
-        
+        // read the body as text first, a crashed server may not send JSON
+        const body = await res.text();
+        let data;
+        try { data = JSON.parse(body); } catch { data = { detail: body }; }
+
         // remove loading text
         if (messages.contains(loadingMsg)) {
           messages.removeChild(loadingMsg);
         }
-        
+
+        // show the status and whatever the server said, word for word
         if (!res.ok) {
-          throw new Error(data.detail || 'Server error');
+          const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+          throw new Error(`${res.status} ${res.statusText}: ${detail}`);
         }
         
         addBotResponse(data);

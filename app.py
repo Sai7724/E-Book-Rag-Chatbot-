@@ -31,5 +31,10 @@ def chat_endpoint(req: ChatRequest):
             confidence_score=res["score"],
         )
     except Exception as e:
+        # Send back the real error. Gemini keeps its HTTP code on e.__cause__.code,
+        # Pinecone on e.status; anything else is a 500 from our side.
         print(f"Error calling graph: {e}")
-        raise HTTPException(status_code=500, detail="Upstream AI error (rate limit or outage)")
+        status = getattr(e.__cause__, "code", None) or getattr(e, "status", None)
+        if not (isinstance(status, int) and 400 <= status < 600):
+            status = 500
+        raise HTTPException(status_code=status, detail=f"{type(e).__name__}: {e}")
