@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic AI Chat</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #fafafa; color: #222; }
+    .app { max-width: 760px; margin: 0 auto; height: 100vh; display: flex; flex-direction: column; padding: 16px; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    h1 span { color: #888; font-weight: normal; }
+    #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .msg { padding: 10px 14px; border-radius: 10px; line-height: 1.5; white-space: pre-wrap; max-width: 90%; }
+    .user { align-self: flex-end; background: #222; color: #fff; }
+    .bot { align-self: flex-start; background: #fff; border: 1px solid #e5e5e5; }
+    .error { border-color: #e99; color: #b00; }
+    .meta { margin-top: 8px; font-size: 13px; color: #666; white-space: normal; }
+    .score { display: inline-block; padding: 1px 8px; border-radius: 10px; background: #eee; margin-right: 8px; }
+    details { margin-top: 6px; }
+    summary { cursor: pointer; }
+    .chunk { background: #f5f5f5; padding: 8px; border-radius: 6px; margin-top: 6px; font-size: 12px; white-space: pre-wrap; }
+    form { display: flex; gap: 8px; margin-top: 12px; }
+    input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 15px; }
+    button { padding: 0 18px; border: 0; border-radius: 8px; background: #222; color: #fff; font-size: 15px; cursor: pointer; }
+    button:disabled { opacity: 0.5; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Agentic AI eBook Chat <span>· answers only from the eBook</span></h1>
+    <div id="messages"></div>
+    <form id="chat-form">
+      <input type="text" id="query-input" placeholder="Ask something about Agentic AI..." autocomplete="off" autofocus />
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('query-input');
+    const messages = document.getElementById('messages');
+    const sendBtn = document.getElementById('send-btn');
+
+    // basic helper to create a message element
+    function addMessage(text, isUser = false, isError = false) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + (isUser ? 'user' : 'bot') + (isError ? ' error' : '');
+      div.textContent = text;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+      return div;
+    }
+
+    function addBotResponse(data) {
+      const div = document.createElement('div');
+      div.className = 'msg bot';
+      
+      // strip markdown bold
+      const text = data.answer.replace(/\*\*/g, '');
+      
+      let html = `<div>${text}</div><div class="meta">`;
+      html += `<span class="score">Confidence: ${data.confidence_score}</span>`;
+      
+      if (data.retrieved_chunks && data.retrieved_chunks.length > 0) {
+        html += `<details><summary>Sources (${data.retrieved_chunks.length} chunks)</summary>`;
+        data.retrieved_chunks.forEach(chunk => {
+          // escape html so it doesn't break
+          const escaped = chunk.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += `<div class="chunk">${escaped}</div>`;
+        });
+        html += `</details>`;
+      }
+      html += `</div>`;
+      
+      div.innerHTML = html;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (!q) return;
+
+      addMessage(q, true);
+      input.value = '';
+      sendBtn.disabled = true;
+
+      const loadingMsg = addMessage('Thinking...', false);
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: q })
+        });
+        
+        const data = await res.json();
+        
+        // remove loading text
+        if (messages.contains(loadingMsg)) {
+          messages.removeChild(loadingMsg);
+        }
+        
+        if (!res.ok) {
+          throw new Error(data.detail || 'Server error');
+        }
+        
+        addBotResponse(data);
+      } catch (err) {
+        if (messages.contains(loadingMsg)) {
+          messages.removeChild(loadingMsg);
+        }
+        addMessage("Error: " + err.message, false, true);
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>
